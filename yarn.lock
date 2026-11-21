@@ -141,9 +141,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"logo-variants@workspace:.":
+"silly-stocks@workspace:.":
   version: 0.0.0-use.local
-  resolution: "logo-variants@workspace:."
+  resolution: "silly-stocks@workspace:."
   dependencies:
     "@resvg/resvg-js": "npm:^2.6.2"
     culori: "npm:^4.0.2"
