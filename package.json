@@ -1,19 +1,18 @@
 {
-  "name": "logo-variants",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Logo-Varianten erzeugen und per iPhone + Kamera als Stockfotos abfotografieren",
-  "scripts": {
-    "variants": "node logo-variants.mjs",
-    "shoot": "node stockshooter.mjs",
-    "shoot:dry": "node stockshooter.mjs --dry-run",
-    "shoot:screenshots": "node stockshooter.mjs screenshots"
-  },
-  "dependencies": {
-    "@resvg/resvg-js": "^2.6.2",
-    "culori": "^4.0.2"
-  },
-  "engines": {
-    "node": ">=18.3"
-  }
+    "name": "silly-stocks",
+    "private": true,
+    "scripts": {
+        "logos": "node logo-variants.mjs",
+        "shoot": "node stockshooter.mjs",
+        "shoot:dry": "node stockshooter.mjs --dry-run",
+        "shoot:screenshots": "node stockshooter.mjs screenshots"
+    },
+    "dependencies": {
+        "@resvg/resvg-js": "^2.6.2",
+        "culori": "^4.0.2"
+    },
+    "engines": {
+        "node": ">=18.3"
+    }
 }
+

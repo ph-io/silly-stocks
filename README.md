@@ -16,7 +16,7 @@ iPhone-App zur Anzeige: `ios/SillyStocksApp.xcodeproj` (Safari geht zum Testen a
 
 | Befehl | Was passiert |
 | --- | --- |
-| `yarn variants` | SVGs aus `logos/src` zu Light/Dark-PNGs in `logos/output` |
+| `yarn logos` | SVGs aus `logos/src` zu Light/Dark-PNGs in `logos/output` |
 | `yarn shoot` | Logos aus `logos/output/png` anzeigen und fotografieren |
 | `yarn shoot:screenshots` | Bilder aus `screenshots` anzeigen und fotografieren |
 | `yarn shoot:dry` | Nur Anzeige testen, ohne Kamera |
@@ -43,4 +43,4 @@ Die Fotos landen in `ingest/` und sind fortlaufend nummeriert, zum Beispiel `000
 
 Beispiel: `yarn shoot --start 42 --shots 2`
 
-Optionen für `yarn variants`: `--width 1206 --height 2622 --logo 1072`
+Optionen für `yarn logos`: `--width 1206 --height 2622 --logo 1072`
