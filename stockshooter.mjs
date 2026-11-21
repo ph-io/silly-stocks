@@ -322,9 +322,10 @@ async function showAndWait(logoFile) {
 // ---------------------------------------------------------------- Kamera
 
 async function releaseUsbOnMac() {
-  // macOS greift sich per PTPCamera die Kamera und blockiert dann gphoto2.
+  // macOS greift sich per PTPCamera (neuere Versionen: ptpcamerad) die Kamera
+  // und blockiert dann gphoto2. ptpcamerad startet neu, reagiert nur auf -9.
   if (process.platform === "darwin")
-    await run("killall", ["PTPCamera"]).catch(() => {});
+    await run("killall", ["-9", "PTPCamera", "ptpcamerad"]).catch(() => {});
 }
 
 async function checkCamera() {
