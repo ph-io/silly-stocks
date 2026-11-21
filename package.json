@@ -2,9 +2,12 @@
   "name": "logo-variants",
   "version": "1.0.0",
   "private": true,
-  "description": "SVG-Logos erweitern, Light/Dark-Varianten und PNGs erzeugen",
+  "description": "Logo-Varianten erzeugen und per iPhone + Kamera als Stockfotos abfotografieren",
   "scripts": {
-    "start": "node logo-variants.mjs"
+    "variants": "node logo-variants.mjs",
+    "shoot": "node stockshooter.mjs",
+    "shoot:dry": "node stockshooter.mjs --dry-run",
+    "shoot:screenshots": "node stockshooter.mjs screenshots"
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.6.2",

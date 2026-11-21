@@ -20,7 +20,7 @@
 // Ohne Angabe: ./logos/output/png. Alternativ als --logos <dir>.
 //
 // Optionen:
-//   --out <dir>       Zielordner für die Kameradateien                      [./out]
+//   --out <dir>       Zielordner für die Kameradateien                   [./ingest]
 //   --port <n>        Port des Webservers                                  [8080]
 //   --start <n>       Mit Bild Nr. n beginnen (1-basiert, zum Fortsetzen)  [1]
 //   --shots <n>       Aufnahmen pro Logo                                   [1]
