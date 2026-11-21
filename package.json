@@ -1,0 +1,16 @@
+{
+  "name": "logo-variants",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SVG-Logos erweitern, Light/Dark-Varianten und PNGs erzeugen",
+  "scripts": {
+    "start": "node logo-variants.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "culori": "^4.0.2"
+  },
+  "engines": {
+    "node": ">=18.3"
+  }
+}
