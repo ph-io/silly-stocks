@@ -2,29 +2,30 @@
 // stockshooter.mjs
 //
 // Zeigt Logos nacheinander im Vollbild auf dem iPhone an, löst die Kamera per
-// gphoto2 aus, lädt die RAW-Datei unter dem Kamera-Dateinamen (z. B. IMG_1234.CR3)
+// gphoto2 aus, lädt die RAW-Datei fortlaufend nummeriert (z. B. 0001.CR3)
 // auf den Mac und schreibt den Logonamen als Titel und Beschreibung in eine XMP-Datei.
 //
 // Anzeige auf dem iPhone: am besten über die App "Shooter" (ios/ShooterApp.swift),
 // die ohne Statusleiste und Home-Indikator läuft. Safari geht zum Testen auch.
 //
-// Voraussetzungen: Node.js 18.3+, gphoto2 (brew install gphoto2),
+// Voraussetzungen: Node.js 20+, gphoto2 (brew install gphoto2),
 // optional exiftool (brew install exiftool) für --embed.
 //
 // Aufruf:
-//   node stockshooter.mjs
+//   node stockshooter.mjs [bildordner]
+//   z. B. node stockshooter.mjs screenshots
+//         node stockshooter.mjs logos/output/png/centered
+//
+// Der Bildordner wird samt Unterordnern durchsucht (png/jpg/webp).
+// Ohne Angabe: ./logos/output/png. Alternativ als --logos <dir>.
 //
 // Optionen:
-//   --logos <dir>     Ordner mit den vorbereiteten Bildern (png/jpg/webp)   [./logos/output/png]
 //   --out <dir>       Zielordner für die Kameradateien                      [./out]
 //   --port <n>        Port des Webservers                                  [8080]
 //   --start <n>       Mit Bild Nr. n beginnen (1-basiert, zum Fortsetzen)  [1]
 //   --shots <n>       Aufnahmen pro Logo                                   [1]
 //   --settle <ms>     Wartezeit nach Bildanzeige vor dem Auslösen          [800]
-//   --fit <contain|cover>  contain: ganzes Bild sichtbar, Rest in der Farbe
-//                     des Bildrands (oben links) gefüllt; cover: Bildschirm
-//                     füllen, ggf. seitlich beschneiden                      [contain]
-//   --align <center|top>   Bei contain: Bild mittig oder oben ausrichten   [center]
+//   --fit <cover|contain>  Darstellung auf dem iPhone                      [cover]
 //   --embed           XMP per exiftool in die CR3 schreiben statt Sidecar-Datei
 //   --dry-run         Ohne Kamera: nur Anzeige auf dem iPhone durchtesten
 //   --no-pause        Vor dem Start nicht auf Enter warten
@@ -38,29 +39,28 @@ import { spawn } from "node:child_process";
 import readline from "node:readline/promises";
 import { parseArgs } from "node:util";
 
-const { values: args } = parseArgs({
+const { values: args, positionals } = parseArgs({
+  allowPositionals: true,
   options: {
-    logos: { type: "string", default: "./logos/output/png/centered" },
-    out: { type: "string", default: "./out" },
+    logos: { type: "string", default: "./logos/output/png" },
+    out: { type: "string", default: "./ingest" },
     port: { type: "string", default: "8080" },
     start: { type: "string", default: "1" },
     shots: { type: "string", default: "1" },
     settle: { type: "string", default: "800" },
-    fit: { type: "string", default: "contain" },
-    align: { type: "string", default: "center" },
+    fit: { type: "string", default: "cover" },
     embed: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     "no-pause": { type: "boolean", default: false },
   },
 });
 
-const LOGO_DIR = path.resolve(args.logos);
+const LOGO_DIR = path.resolve(positionals[0] ?? args.logos);
 const OUT_DIR = path.resolve(args.out);
 const PORT = Number(args.port);
 const SHOTS = Math.max(1, Number(args.shots));
 const SETTLE_MS = Math.max(0, Number(args.settle));
-const FIT = args.fit === "cover" ? "cover" : "contain";
-const ALIGN = args.align === "top" ? "top" : "center";
+const FIT = args.fit === "contain" ? "contain" : "cover";
 const DRY = args["dry-run"];
 const ACK_TIMEOUT_MS = 10_000;
 const CAPTURE_ATTEMPTS = 3;
@@ -162,24 +162,17 @@ const PAGE = `<!doctype html>
     pre.src = msg.url;
     try { await pre.decode(); } catch { setStatus('Bild konnte nicht geladen werden'); return; }
     if (msg.id !== latest) return;
-    // Freie Fläche in der Farbe des Bildrands (Pixel oben links) füllen.
-    try {
-      const c = document.createElement('canvas');
-      c.width = c.height = 1;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(pre, 0, 0, 1, 1, 0, 0, 1, 1);
-      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-      document.documentElement.style.background = document.body.style.background = 'rgb(' + r + ',' + g + ',' + b + ')';
-    } catch {}
     img.style.objectFit = msg.fit;
-    img.style.objectPosition = msg.align === 'top' ? 'center top' : 'center center';
     img.src = pre.src;
     try { await img.decode(); } catch {}
     setStatus('');
     // Zwei Frames abwarten, damit das Bild sicher auf dem Display ist.
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (msg.id !== latest) return;
-      fetch('/ack?id=' + msg.id, { method: 'POST' }).catch(() => {});
+      // Bild- und Bildschirmmaße mitschicken, damit der Mac prüfen kann, ob es exakt passt.
+      const q = 'id=' + msg.id + '&w=' + pre.naturalWidth + '&h=' + pre.naturalHeight +
+        '&sw=' + window.innerWidth + '&sh=' + window.innerHeight + '&dpr=' + (window.devicePixelRatio || 1);
+      fetch('/ack?' + q, { method: 'POST' }).catch(() => {});
     }));
   };
 </script>
@@ -202,6 +195,26 @@ let current = null; // { id, url, fit }
 let pendingAck = null; // { id, resolve }
 let msgId = 0;
 let logoSet = new Set();
+
+// Warnt, wenn das Seitenverhältnis des Bildes nicht zum Bildschirm passt,
+// das Bild also beschnitten wird (cover) oder einen Rand bekommt (contain).
+let lastScreen = "";
+function checkFit(q) {
+  const [w, h, sw, sh] = ["w", "h", "sw", "sh"].map((k) => Number(q.get(k)));
+  const dpr = Number(q.get("dpr")) || 1;
+  if (!(w > 0 && h > 0 && sw > 0 && sh > 0)) return;
+  const screen = `${Math.round(sw * dpr)}×${Math.round(sh * dpr)} px`;
+  if (screen !== lastScreen) {
+    lastScreen = screen;
+    console.log(`  Anzeigefläche iPhone: ${screen}`);
+  }
+  const diff = Math.abs(w / h / (sw / sh) - 1);
+  if (diff > 0.005)
+    console.log(
+      `  Achtung: Bild ${w}×${h} passt nicht exakt auf ${screen}, ` +
+        (FIT === "cover" ? "wird beschnitten." : "bekommt einen Rand."),
+    );
+}
 
 function sendTo(res, msg) {
   res.write(`data: ${JSON.stringify(msg)}\n\n`);
@@ -244,7 +257,10 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/ack" && req.method === "POST") {
     const id = Number(url.searchParams.get("id"));
-    if (pendingAck && pendingAck.id === id) pendingAck.resolve();
+    if (pendingAck && pendingAck.id === id) {
+      checkFit(url.searchParams);
+      pendingAck.resolve();
+    }
     res.writeHead(204);
     return res.end();
   }
@@ -280,7 +296,6 @@ async function showAndWait(logoFile) {
       id,
       url: `/logo/${encodeURIComponent(logoFile)}?v=${id}`,
       fit: FIT,
-      align: ALIGN,
     };
     const acked = new Promise((resolve) => {
       const t = setTimeout(() => resolve(false), ACK_TIMEOUT_MS);
@@ -307,10 +322,9 @@ async function showAndWait(logoFile) {
 // ---------------------------------------------------------------- Kamera
 
 async function releaseUsbOnMac() {
-  // macOS greift sich die Kamera und blockiert dann gphoto2:
-  // bis 10.14 per PTPCamera, ab 10.15 per ptpcamerad (User-LaunchAgent, startet neu).
+  // macOS greift sich per PTPCamera die Kamera und blockiert dann gphoto2.
   if (process.platform === "darwin")
-    await run("killall", ["PTPCamera", "ptpcamerad"]).catch(() => {});
+    await run("killall", ["PTPCamera"]).catch(() => {});
 }
 
 async function checkCamera() {
@@ -327,21 +341,15 @@ async function checkCamera() {
   console.log(`Kamera: ${cams[0]}`);
 }
 
-// Zielpfad im Ausgabeordner mit dem Kamera-Dateinamen. Nur wenn es den Namen
-// dort schon gibt (z. B. gleicher Zählerstand bei R5 und R5 II), wird "-2"
-// angehängt, damit nichts überschrieben wird.
-async function targetFor(cameraName) {
-  const ext = path.extname(cameraName);
-  const stem = path.basename(cameraName, ext);
-  const taken = new Set(
-    (await fs.readdir(OUT_DIR)).map((f) =>
-      f.replace(/\.[^.]+$/, "").toLowerCase(),
-    ),
-  );
-  let candidate = stem;
-  for (let n = 2; taken.has(candidate.toLowerCase()); n++)
-    candidate = `${stem}-${n}`;
-  return path.join(OUT_DIR, candidate + ext);
+// Nächste freie fortlaufende Nummer (0001, 0002, …): höchste vierstellige
+// Nummer im Ausgabeordner + 1, damit auch nach Neustart nichts überschrieben wird.
+async function nextNumber() {
+  let max = 0;
+  for (const f of await fs.readdir(OUT_DIR)) {
+    const m = /^(\d{4,})\./.exec(f);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return String(max + 1).padStart(4, "0");
 }
 
 async function capture() {
@@ -362,13 +370,11 @@ async function capture() {
   if (!saved.length)
     throw new Error(`gphoto2 hat keine Datei gespeichert:\n${out.trim()}`);
 
+  // Alle Dateien einer Aufnahme (z. B. CR3 + JPG) bekommen dieselbe Nummer.
+  const nr = await nextNumber();
   const files = [];
   for (const src of saved) {
-    const dest = await targetFor(path.basename(src));
-    if (path.basename(dest) !== path.basename(src))
-      console.log(
-        `  Achtung: ${path.basename(src)} gibt es schon, gespeichert als ${path.basename(dest)}`,
-      );
+    const dest = path.join(OUT_DIR, nr + path.extname(src));
     await fs.rename(src, dest);
     files.push(dest);
   }
@@ -447,8 +453,15 @@ process.on("SIGINT", () => {
 });
 
 async function main() {
-  const logos = (await fs.readdir(LOGO_DIR))
-    .filter((f) => !f.startsWith(".") && MIME[path.extname(f).toLowerCase()])
+  // Relative Pfade inkl. Unterordner, z. B. "centered/apple-11.png"
+  const logos = (await fs.readdir(LOGO_DIR, { recursive: true }))
+    .filter((f) => {
+      const base = path.basename(f);
+      return (
+        !f.split(path.sep).some((p) => p.startsWith(".")) &&
+        MIME[path.extname(base).toLowerCase()]
+      );
+    })
     .sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
   if (!logos.length) throw new Error(`Keine Bilder in ${LOGO_DIR}`);
   logoSet = new Set(logos);
