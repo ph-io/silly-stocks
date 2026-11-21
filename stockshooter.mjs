@@ -21,7 +21,10 @@
 //   --start <n>       Mit Bild Nr. n beginnen (1-basiert, zum Fortsetzen)  [1]
 //   --shots <n>       Aufnahmen pro Logo                                   [1]
 //   --settle <ms>     Wartezeit nach Bildanzeige vor dem Auslösen          [800]
-//   --fit <cover|contain>  Darstellung auf dem iPhone                      [cover]
+//   --fit <contain|cover>  contain: ganzes Bild sichtbar, Rest in der Farbe
+//                     des Bildrands (oben links) gefüllt; cover: Bildschirm
+//                     füllen, ggf. seitlich beschneiden                      [contain]
+//   --align <center|top>   Bei contain: Bild mittig oder oben ausrichten   [center]
 //   --embed           XMP per exiftool in die CR3 schreiben statt Sidecar-Datei
 //   --dry-run         Ohne Kamera: nur Anzeige auf dem iPhone durchtesten
 //   --no-pause        Vor dem Start nicht auf Enter warten
@@ -37,13 +40,14 @@ import { parseArgs } from "node:util";
 
 const { values: args } = parseArgs({
   options: {
-    logos: { type: "string", default: "./logos/output/png" },
-    out: { type: "string", default: "./ingest" },
+    logos: { type: "string", default: "./logos/output/png/centered" },
+    out: { type: "string", default: "./out" },
     port: { type: "string", default: "8080" },
     start: { type: "string", default: "1" },
     shots: { type: "string", default: "1" },
     settle: { type: "string", default: "800" },
-    fit: { type: "string", default: "cover" },
+    fit: { type: "string", default: "contain" },
+    align: { type: "string", default: "center" },
     embed: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     "no-pause": { type: "boolean", default: false },
@@ -55,7 +59,8 @@ const OUT_DIR = path.resolve(args.out);
 const PORT = Number(args.port);
 const SHOTS = Math.max(1, Number(args.shots));
 const SETTLE_MS = Math.max(0, Number(args.settle));
-const FIT = args.fit === "contain" ? "contain" : "cover";
+const FIT = args.fit === "cover" ? "cover" : "contain";
+const ALIGN = args.align === "top" ? "top" : "center";
 const DRY = args["dry-run"];
 const ACK_TIMEOUT_MS = 10_000;
 const CAPTURE_ATTEMPTS = 3;
@@ -157,7 +162,17 @@ const PAGE = `<!doctype html>
     pre.src = msg.url;
     try { await pre.decode(); } catch { setStatus('Bild konnte nicht geladen werden'); return; }
     if (msg.id !== latest) return;
+    // Freie Fläche in der Farbe des Bildrands (Pixel oben links) füllen.
+    try {
+      const c = document.createElement('canvas');
+      c.width = c.height = 1;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(pre, 0, 0, 1, 1, 0, 0, 1, 1);
+      const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+      document.documentElement.style.background = document.body.style.background = 'rgb(' + r + ',' + g + ',' + b + ')';
+    } catch {}
     img.style.objectFit = msg.fit;
+    img.style.objectPosition = msg.align === 'top' ? 'center top' : 'center center';
     img.src = pre.src;
     try { await img.decode(); } catch {}
     setStatus('');
@@ -265,6 +280,7 @@ async function showAndWait(logoFile) {
       id,
       url: `/logo/${encodeURIComponent(logoFile)}?v=${id}`,
       fit: FIT,
+      align: ALIGN,
     };
     const acked = new Promise((resolve) => {
       const t = setTimeout(() => resolve(false), ACK_TIMEOUT_MS);
@@ -291,9 +307,10 @@ async function showAndWait(logoFile) {
 // ---------------------------------------------------------------- Kamera
 
 async function releaseUsbOnMac() {
-  // macOS greift sich per PTPCamera die Kamera und blockiert dann gphoto2.
+  // macOS greift sich die Kamera und blockiert dann gphoto2:
+  // bis 10.14 per PTPCamera, ab 10.15 per ptpcamerad (User-LaunchAgent, startet neu).
   if (process.platform === "darwin")
-    await run("killall", ["PTPCamera"]).catch(() => {});
+    await run("killall", ["PTPCamera", "ptpcamerad"]).catch(() => {});
 }
 
 async function checkCamera() {

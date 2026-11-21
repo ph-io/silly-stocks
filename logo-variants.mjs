@@ -7,16 +7,17 @@
  *      Sonst wird sie aus <name>.svg erzeugt: Logofarben per Helligkeitsumkehr
  *      (HSL: L' = 1 - L, Farbton und Sättigung bleiben) und als <name>-dark.svg
  *      im Eingabeordner gespeichert.
- *   2. Erst dann Logo so skalieren, dass seine längste Seite --logo px misst
- *      (Standard 2000), und Zeichenfläche auf 9:16 erweitern,
- *      --canvas = Höhe in px (Standard 4000 -> 2250x4000), in zwei Layouts:
+ *   2. Erst dann Zeichenfläche auf die Bildschirmauflösung des iPhones erweitern
+ *      (--width x --height, Standard 1206x2622 wie die Screenshots) und das Logo
+ *      so skalieren, dass seine längste Seite --logo px misst (Standard 8/9 der
+ *      Breite, also 1072 px; entspricht dem bisherigen 2000 auf 2250), in zwei Layouts:
  *        centered: Logo in der Mitte
  *        top:      Logo oben (Abstand = seitlicher Rand bei voller Breite), Fläche nach unten erweitert
  *      Hintergrund weiß (<name>.svg) bzw. schwarz (<name>-dark.svg).
  *   3. Alle erzeugten SVGs als PNG rendern.
  *
  * Aufruf:
- *   node logo-variants.mjs [eingabeordner] [ausgabeordner] [--logo 2000] [--canvas 4000]
+ *   node logo-variants.mjs [eingabeordner] [ausgabeordner] [--width 1206] [--height 2622] [--logo 1072]
  *
  * Ausgabe (Standard logos/output, d. h. <eingabeordner>/../output):
  *   <ausgabeordner>/svg/<centered|top>/<unterordner>/<name>.svg|<name>-dark.svg
@@ -37,15 +38,18 @@ const toHsl = converter("hsl");
 const { values: opts, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    logo: { type: "string", default: "2000" },
-    canvas: { type: "string", default: "4000" },
+    // Bildschirmauflösung des iPhones in Pixeln (iPhone-Screenshot = Maßstab)
+    width: { type: "string", default: "1206" },
+    height: { type: "string", default: "2622" },
+    // Längste Logoseite in px; ohne Angabe 8/9 der Breite
+    logo: { type: "string" },
     help: { type: "boolean", short: "h", default: false },
   },
 });
 
 if (opts.help) {
   console.log(
-    "Aufruf: node logo-variants.mjs [eingabeordner=logos/src] [ausgabeordner=logos/output] [--logo 2000] [--canvas 4000]",
+    "Aufruf: node logo-variants.mjs [eingabeordner=logos/src] [ausgabeordner=logos/output] [--width 1206] [--height 2622] [--logo 1072]",
   );
   process.exit(0);
 }
@@ -57,15 +61,16 @@ const OUTPUT_DIR = path.resolve(
   positionals[1] ?? path.join(INPUT_DIR, "..", "output"),
 );
 const DARK_SUFFIX = "-dark";
-const LOGO_PX = Number(opts.logo);
-const CANVAS_H = Number(opts.canvas);
-const CANVAS_W = Math.round((CANVAS_H * 9) / 16); // Hochformat 9:16
+const CANVAS_W = Number(opts.width);
+const CANVAS_H = Number(opts.height);
+const LOGO_PX = opts.logo ? Number(opts.logo) : Math.round((CANVAS_W * 8) / 9);
+
+if (!(CANVAS_W > 0 && CANVAS_H > 0))
+  throw new Error(`--width und --height müssen > 0 sein`);
 
 if (!(LOGO_PX > 0)) throw new Error(`--logo muss > 0 sein (ist: ${opts.logo})`);
 if (!(CANVAS_W >= LOGO_PX))
-  throw new Error(
-    `Canvas-Breite (${CANVAS_W} = 9/16 von --canvas) muss >= --logo sein`,
-  );
+  throw new Error(`Breite (${CANVAS_W}) muss >= --logo (${LOGO_PX}) sein`);
 
 const LAYOUTS = ["centered", "top"];
 // Abstand oben bei "top" = seitlicher Rand eines Logos in voller Breite
@@ -147,7 +152,7 @@ function expandWithBackground(svg, color, layout) {
     throw new Error(`ungültige viewBox: "${vb}"`);
   }
 
-  // 9:16-Fläche: längste Logoseite entspricht LOGO_PX, Logo horizontal zentriert,
+  // Bildschirmfläche: längste Logoseite entspricht LOGO_PX, Logo horizontal zentriert,
   // vertikal zentriert ("centered") oder TOP_MARGIN_PX unter der Oberkante ("top")
   const unitsPerPx = Math.max(w, h) / LOGO_PX;
   const nw = CANVAS_W * unitsPerPx,
