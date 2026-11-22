@@ -88,19 +88,21 @@ async function readMeta(files) {
 function buildPrompt(thumbName, existing) {
     return `Lies die Bilddatei ./${thumbName}. Es ist ein Foto für eine Bildagentur (redaktionelle Nutzung) und zeigt einen Bildschirm, ein Gerät oder ein Objekt mit dem Logo einer App, Marke oder Firma.
 
-1. Erkenne, welche App/Firma/Marke zu sehen ist. Wenn mehrere, dann in der Reihenfolge von links nach rechts.
-2. Schreibe den Namen der App/Firma/Marke in die Bildunterschrift. Wenn mehrere, dann durch Komma getrennt.
-3. Schreibe den gängigen Namen der App/Firma/Marke in die Keywords, sowie den offiziellen Namen und ggf. den Namen der Muttergesellschaft (falls zutreffend). Außerdem 1-6 Stichwörter, die die App/Firma/Marke mit allgemeinen Begriffen bschreibt – diese Stichwörter in Deutsch und Englisch hinzufügen.
+1. Erkenne alle Apps/Firmen/Marken auf dem Bild. Reihenfolge: von links nach rechts, dann von oben nach unten.
+2. Bildunterschrift: nur die Namen, wie sie gängig geschrieben werden. Mehrere durch Komma getrennt, die letzten beiden mit „und“.
+3. Keywords, für jede erkannte App/Firma/Marke:
+   - der gängige Name
+   - der offizielle Firmenname, falls er abweicht
+   - die Muttergesellschaft (gängiger und offizieller Name), falls es eine gibt
+   - 1–6 allgemeine Begriffe für Branche bzw. Kategorie, jeweils auf Deutsch und Englisch. Ist ein Begriff in beiden Sprachen gleich, nur einmal.
+   Keine Duplikate. Keine Kommas innerhalb eines Keywords.
 
-3 Beispiele für die Bildunterschrift:
-* Facebook, Instragram und SnapChat
-* Anthropic
-* ARD Mediathek
+Erkennst du ein Logo nicht sicher, rate nicht. Lass Bildunterschrift und Keywords dann leer.
 
-3 Beispiele für die Keywords:
-* Facebook, Facebook Inc., Meta, Meta Platforms Inc., Social Media, Social Network
-* YouTube, YouTube LLC, Alphabet, Alphabet Inc., Social Media, Social Network, Video-Streaming, Streaming
-* ChatGPT, OpenAI, OpenAI, Inc., KI, Künstliche Intelligenz, AI, Artificial Intelligence
+Beispiele (Bildunterschrift → Keywords):
+- Claude → Claude, Anthropic, Anthropic PBC, KI, Künstliche Intelligenz, AI, Artificial Intelligence
+- YouTube → YouTube, YouTube LLC, Alphabet, Alphabet Inc., Video-Streaming, Video Streaming, Soziale Medien, Social Media
+- Facebook, Instagram und Snapchat → Facebook, Instagram, Meta, Meta Platforms Inc., Snapchat, Snap, Snap Inc., Soziales Netzwerk, Social Network, Soziale Medien, Social Media
 
 ${
     existing
