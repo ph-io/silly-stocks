@@ -61,6 +61,12 @@ function run(cmd, argv, opts = {}) {
     })
 }
 
+// macOS-Systemsound (/System/Library/Sounds). Fehler egal, Sound ist nur Hinweis.
+function playSound(name) {
+    if (process.platform !== 'darwin') return Promise.resolve()
+    return run('afplay', [`/System/Library/Sounds/${name}.aiff`]).catch(() => {})
+}
+
 // EXIF-Orientation (numerisch) -> Drehwinkel für sharp. Die eingebettete Vorschau ist ungedreht.
 const ROTATE = { 3: 180, 6: 90, 8: 270 }
 
@@ -157,8 +163,8 @@ function validate(r) {
         if (prev === undefined || (!prev.includes('-') && kw.includes('-'))) byKey.set(key, kw)
     }
     const keywords = [...byKey.values()]
-    if (!caption) throw new Error(`leere Caption von Claude: ${JSON.stringify(r)}`)
-    if (!keywords.length) throw new Error(`keine Keywords von Claude: ${JSON.stringify(r)}`)
+    if (!caption) throw Object.assign(new Error(`leere Caption von Claude: ${JSON.stringify(r)}`), { noData: true })
+    if (!keywords.length) throw Object.assign(new Error(`keine Keywords von Claude: ${JSON.stringify(r)}`), { noData: true })
     return { company: String(r.company ?? '').trim(), caption, keywords }
 }
 
@@ -216,6 +222,7 @@ async function main() {
             } catch (e) {
                 failed.push(rel)
                 console.error(`${tag}\n  FEHLER: ${e.message}`)
+                if (e.noData) playSound('Basso') // nicht awaiten, nächste Datei startet sofort
             }
         }
     } finally {
