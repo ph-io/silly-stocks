@@ -96,8 +96,9 @@ function buildPrompt(thumbName, existing) {
    - der gängige Name
    - der offizielle Firmenname, falls er abweicht
    - die Muttergesellschaft (gängiger und offizieller Name), falls es eine gibt
-   - 1–6 allgemeine Begriffe für Branche bzw. Kategorie, jeweils auf Deutsch und Englisch. Ist ein Begriff in beiden Sprachen gleich, nur einmal.
-   Keine Duplikate. Keine Kommas innerhalb eines Keywords. Verwende keine Stichwörter wie "App", "Icon" oder "Logo", wenn sie nicht Teil des Namens der App/Firma/Marke sind.
+   - 1–6 allgemeine Begriffe für Branche bzw. Kategorie, auf Deutsch und Englisch. Den englischen Begriff nur ergänzen, wenn er ein anderes Wort ist (z. B. „Künstliche Intelligenz“ und „Artificial Intelligence“). Unterscheidet er sich nur durch Bindestrich, Leerzeichen oder Groß-/Kleinschreibung, ist er ein Duplikat.
+   Keine Duplikate. Von Schreibvarianten nur die mit Bindestrich: „Online-Shop“, nicht zusätzlich „Online Shop“; „Shopping-App“, nicht zusätzlich „Shopping App“. Keine Kommas innerhalb eines Keywords. 
+   Verwende keine Stichwörter wie "App", "Icon" oder "Logo", wenn sie nicht Teil des Namens der App/Firma/Marke sind.
 
 Erkennst du ein Logo nicht sicher, rate nicht. Lass Bildunterschrift und Keywords dann leer.
 
@@ -146,16 +147,16 @@ async function askClaude(tmpDir, thumbName, existing) {
 // Vertrauensgrenze: nur sauberes Ergebnis wird geschrieben.
 function validate(r) {
     const caption = typeof r?.caption === 'string' ? r.caption.trim() : ''
-    const keywords = Array.isArray(r?.keywords)
-        ? [
-              ...new Set(
-                  r.keywords
-                      .filter((k) => typeof k === 'string')
-                      .map((k) => k.trim())
-                      .filter(Boolean)
-              ),
-          ]
-        : []
+    // Schreibvarianten (Bindestrich/Leerzeichen/Groß-klein) zusammenfassen, Bindestrich-Variante gewinnt.
+    const byKey = new Map()
+    for (const k of Array.isArray(r?.keywords) ? r.keywords : []) {
+        if (typeof k !== 'string' || !k.trim()) continue
+        const kw = k.trim()
+        const key = kw.toLowerCase().replace(/[\s-]+/g, '')
+        const prev = byKey.get(key)
+        if (prev === undefined || (!prev.includes('-') && kw.includes('-'))) byKey.set(key, kw)
+    }
+    const keywords = [...byKey.values()]
     if (!caption) throw new Error(`leere Caption von Claude: ${JSON.stringify(r)}`)
     if (!keywords.length) throw new Error(`keine Keywords von Claude: ${JSON.stringify(r)}`)
     return { company: String(r.company ?? '').trim(), caption, keywords }
@@ -167,6 +168,11 @@ assert.deepEqual(validate({ company: 'X', caption: ' c ', keywords: [' a', 'a', 
     caption: 'c',
     keywords: ['a', 'b'],
 })
+assert.deepEqual(validate({ caption: 'c', keywords: ['Online Shop', 'Shopping-App', 'Online-Shop', 'shopping app', 'Social Media'] }).keywords, [
+    'Online-Shop',
+    'Shopping-App',
+    'Social Media',
+])
 assert.throws(() => validate({ caption: ' ', keywords: ['a'] }))
 assert.throws(() => validate({ caption: 'c', keywords: [] }))
 assert.throws(() => validate(undefined))
