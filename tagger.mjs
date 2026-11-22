@@ -88,9 +88,19 @@ async function readMeta(files) {
 function buildPrompt(thumbName, existing) {
     return `Lies die Bilddatei ./${thumbName}. Es ist ein Foto für eine Bildagentur (redaktionelle Nutzung) und zeigt einen Bildschirm, ein Gerät oder ein Objekt mit dem Logo einer App, Marke oder Firma.
 
-1. Erkenne, welche App / Firma / Marke zu sehen ist.
-2. Schreibe eine sachliche deutsche Bildunterschrift (ein Satz, max. 200 Zeichen), die die App/Firma nennt und beschreibt, was zu sehen ist.
-3. Schreibe 15–30 deutsche Keywords, die wichtigsten zuerst, inklusive des App-/Firmennamens.
+1. Erkenne, welche App/Firma/Marke zu sehen ist. Wenn mehrere, dann in der Reihenfolge von links nach rechts.
+2. Schreibe den Namen der App/Firma/Marke in die Bildunterschrift. Wenn mehrere, dann durch Komma getrennt.
+3. Schreibe den gängigen Namen der App/Firma/Marke in die Keywords, sowie den offiziellen Namen und ggf. den Namen der Muttergesellschaft (falls zutreffend). Außerdem 1-6 Stichwörter, die die App/Firma/Marke mit allgemeinen Begriffen bschreibt – diese Stichwörter in Deutsch und Englisch hinzufügen.
+
+3 Beispiele für die Bildunterschrift:
+* Facebook, Instragram und SnapChat
+* Anthropic
+* ARD Mediathek
+
+3 Beispiele für die Keywords:
+* Facebook, Facebook Inc., Meta, Meta Platforms Inc., Social Media, Social Network
+* YouTube, YouTube LLC, Alphabet, Alphabet Inc., Social Media, Social Network, Video-Streaming, Streaming
+* ChatGPT, OpenAI, OpenAI, Inc., KI, Künstliche Intelligenz, AI, Artificial Intelligence
 
 ${
     existing
@@ -159,7 +169,7 @@ async function writeMeta(files, { caption, keywords }) {
         '-m',
         `-XMP-dc:Title=${caption}`,
         `-XMP-dc:Description=${caption}`,
-        '-XMP-dc:Subject=', // alte Keywords ersetzen statt anhängen
+        // '-XMP-dc:Subject=', // alte Keywords ersetzen statt anhängen
         ...keywords.map((k) => `-XMP-dc:Subject=${k}`),
         ...files,
     ])
