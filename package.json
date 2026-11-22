@@ -5,11 +5,13 @@
         "logos": "node logo-variants.mjs",
         "shoot": "node stockshooter.mjs",
         "shoot:dry": "node stockshooter.mjs --dry-run",
-        "shoot:screenshots": "node stockshooter.mjs screenshots"
+        "shoot:screenshots": "node stockshooter.mjs screenshots",
+        "tag": "node tagger.mjs"
     },
     "dependencies": {
         "@resvg/resvg-js": "^2.6.2",
-        "culori": "^4.0.2"
+        "culori": "^4.0.2",
+        "sharp": "^0.35.5"
     },
     "engines": {
         "node": ">=18.3"
