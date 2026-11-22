@@ -29,6 +29,8 @@ if (!positionals[0]) {
 }
 const DIR = path.resolve(positionals[0])
 const THUMB_EDGE = 920
+const MODEL = 'sonnet' // Alias (fable, opus, sonnet, haiku) oder volle Model-ID
+const EFFORT = 'medium' // low, medium, high, xhigh, max
 
 const SCHEMA = {
     type: 'object',
@@ -121,6 +123,10 @@ async function askClaude(tmpDir, thumbName, existing) {
             buildPrompt(thumbName, existing),
             '--safe-mode', // keine Hooks/Plugins/CLAUDE.md des Nutzers – sauberer Output
             '--no-session-persistence',
+            '--model',
+            MODEL,
+            '--effort',
+            EFFORT,
             '--tools',
             'Read',
             '--allowedTools',
