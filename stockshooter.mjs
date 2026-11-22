@@ -405,6 +405,12 @@ async function writeMeta(file, text) {
 
 let currentIndex = null
 
+// macOS-Systemsound (/System/Library/Sounds). Fehler egal, Sound ist nur Hinweis.
+function playSound(name) {
+    if (process.platform !== 'darwin') return Promise.resolve()
+    return run('afplay', [`/System/Library/Sounds/${name}.aiff`]).catch(() => {})
+}
+
 process.on('SIGINT', () => {
     if (currentIndex !== null) console.log(`\nAbgebrochen. Fortsetzen mit: --start ${currentIndex + 1}`)
     process.exit(130)
@@ -454,6 +460,7 @@ async function main() {
     const log = path.join(OUT_DIR, 'shots.csv')
     if (!fssync.existsSync(log)) await fs.writeFile(log, 'zeit;nr;logo;datei\n')
 
+    playSound('Glass') // nicht awaiten, Durchlauf startet sofort
     for (let i = startIdx; i < logos.length; i++) {
         currentIndex = i
         const logo = logos[i]
@@ -480,6 +487,7 @@ async function main() {
 
     currentIndex = null
     console.log('\nFertig.')
+    await playSound('Hero')
     server.close()
     process.exit(0)
 }
