@@ -10,6 +10,9 @@ brew install exiftool          # für --embed und yarn tag
 yarn install
 ```
 
+Für `yarn tag` außerdem: eingeloggte `claude` CLI.
+```
+
 iPhone-App zur Anzeige: `ios/SillyStocksApp.xcodeproj` (Safari geht zum Testen auch).
 
 ## Befehle
@@ -25,6 +28,8 @@ iPhone-App zur Anzeige: `ios/SillyStocksApp.xcodeproj` (Safari geht zum Testen a
 Ein anderer Bildordner geht als Argument: `yarn shoot logos/output/png/centered` oder  `yarn shoot "screenshots/mit Header"`.
 
 ## Ausgabe
+
+Zu Beginn und am Ende des Durchlaufs spielt der Mac einen Ton.
 
 Die Fotos landen in `ingest/` und sind fortlaufend nummeriert, zum Beispiel `0001.CR3` mit `0001.xmp`. Titel und Beschreibung im XMP sind der Logoname. `ingest/shots.csv` hält fest, welches Logo zu welcher Datei gehört.
 
@@ -54,4 +59,6 @@ Optionen für `yarn logos`: `--width 1206 --height 2622 --logo 1072`
 2. `claude -p` erkennt darauf die App bzw. Firma. Vorhandene Titel, Beschreibungen und Keywords aus CR3 und XMP gehen als Hinweis mit.
 3. Die deutsche Caption landet in Titel und Beschreibung, die Keywords ersetzen die alten. Geschrieben wird in die CR3 und, falls vorhanden, in die XMP-Sidecar-Datei.
 
-Voraussetzung: eingeloggte `claude` CLI.
+Modell, Effort und Thumbnail-Größe stehen als Konstanten oben in `tagger.mjs` (`MODEL`, `EFFORT`, `THUMB_EDGE`).
+
+Das Script überschreibt die Originale ohne Backup. Erst an einer Kopie testen.

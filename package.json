@@ -3,9 +3,9 @@
     "private": true,
     "scripts": {
         "logos": "node logo-variants.mjs",
-        "shoot": "node stockshooter.mjs",
-        "shoot:dry": "node stockshooter.mjs --dry-run",
-        "shoot:screenshots": "node stockshooter.mjs screenshots",
+        "shoot": "node shooter.mjs",
+        "shoot:dry": "node shooter.mjs --dry-run",
+        "shoot:screenshots": "node shooter.mjs screenshots",
         "tag": "node tagger.mjs"
     },
     "dependencies": {

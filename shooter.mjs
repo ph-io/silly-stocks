@@ -1,20 +1,20 @@
 #!/usr/bin/env node
-// stockshooter.mjs
+// shooter.mjs
 //
 // Zeigt Logos nacheinander im Vollbild auf dem iPhone an, löst die Kamera per
 // gphoto2 aus, lädt die RAW-Datei fortlaufend nummeriert (z. B. 0001.CR3)
 // auf den Mac und schreibt den Logonamen als Titel und Beschreibung in eine XMP-Datei.
 //
-// Anzeige auf dem iPhone: am besten über die App "Shooter" (ios/ShooterApp.swift),
+// Anzeige auf dem iPhone: am besten über die App "Shooter" (ios/SillyStocksApp.xcodeproj),
 // die ohne Statusleiste und Home-Indikator läuft. Safari geht zum Testen auch.
 //
 // Voraussetzungen: Node.js 20+, gphoto2 (brew install gphoto2),
 // optional exiftool (brew install exiftool) für --embed.
 //
 // Aufruf:
-//   node stockshooter.mjs [bildordner]
-//   z. B. node stockshooter.mjs screenshots
-//         node stockshooter.mjs logos/output/png/centered
+//   node shooter.mjs [bildordner]
+//   z. B. node shooter.mjs screenshots
+//         node shooter.mjs logos/output/png/centered
 //
 // Der Bildordner wird samt Unterordnern durchsucht (png/jpg/webp).
 // Ohne Angabe: ./logos/output/png. Alternativ als --logos <dir>.

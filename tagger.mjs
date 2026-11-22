@@ -97,13 +97,13 @@ function buildPrompt(thumbName, existing) {
    - der offizielle Firmenname, falls er abweicht
    - die Muttergesellschaft (gängiger und offizieller Name), falls es eine gibt
    - 1–6 allgemeine Begriffe für Branche bzw. Kategorie, jeweils auf Deutsch und Englisch. Ist ein Begriff in beiden Sprachen gleich, nur einmal.
-   Keine Duplikate. Keine Kommas innerhalb eines Keywords.
+   Keine Duplikate. Keine Kommas innerhalb eines Keywords. Verwende keine Stichwörter wie "App", "Icon" oder "Logo", wenn sie nicht Teil des Namens der App/Firma/Marke sind.
 
 Erkennst du ein Logo nicht sicher, rate nicht. Lass Bildunterschrift und Keywords dann leer.
 
 Beispiele (Bildunterschrift → Keywords):
 - Claude → Claude, Anthropic, Anthropic PBC, KI, Künstliche Intelligenz, AI, Artificial Intelligence
-- YouTube → YouTube, YouTube LLC, Alphabet, Alphabet Inc., Video-Streaming, Video Streaming, Soziale Medien, Social Media
+- YouTube → YouTube, YouTube LLC, Alphabet, Alphabet Inc., Video-Streaming, Streaming, Soziale Medien, Social Media
 - Facebook, Instagram und Snapchat → Facebook, Instagram, Meta, Meta Platforms Inc., Snapchat, Snap, Snap Inc., Soziales Netzwerk, Social Network, Soziale Medien, Social Media
 
 ${
