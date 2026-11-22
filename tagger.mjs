@@ -16,7 +16,6 @@
 
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import os from 'node:os'
 import { spawn } from 'node:child_process'
 import { parseArgs } from 'node:util'
 import assert from 'node:assert/strict'
@@ -45,10 +44,11 @@ const SCHEMA = {
 
 // ---------------------------------------------------------------- Hilfsfunktionen
 
-// stdin "ignore", sonst wartet claude -p auf Eingabe. stdout als Buffer (Vorschau-JPEG ist binär).
-function run(cmd, argv, opts = {}) {
+// input wird auf stdin geschrieben, sonst stdin "ignore". stdout als Buffer (Vorschau-JPEG ist binär).
+function run(cmd, argv, input) {
     return new Promise((resolve, reject) => {
-        const p = spawn(cmd, argv, { stdio: ['ignore', 'pipe', 'pipe'], ...opts })
+        const p = spawn(cmd, argv, { stdio: [input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] })
+        if (input !== undefined) p.stdin.end(input)
         const out = []
         let err = ''
         p.stdout.on('data', (d) => out.push(d))
@@ -70,16 +70,16 @@ function playSound(name) {
 // EXIF-Orientation (numerisch) -> Drehwinkel für sharp. Die eingebettete Vorschau ist ungedreht.
 const ROTATE = { 3: 180, 6: 90, 8: 270 }
 
-async function makeThumb(cr3, dest) {
+async function makeThumb(cr3) {
     let jpg = await run('exiftool', ['-b', '-PreviewImage', cr3])
     if (!jpg.length) jpg = await run('exiftool', ['-b', '-JpgFromRaw', cr3])
     if (!jpg.length) throw new Error('keine eingebettete Vorschau gefunden')
     const [{ Orientation } = {}] = JSON.parse((await run('exiftool', ['-j', '-n', '-Orientation', cr3])).toString())
-    await sharp(jpg)
+    return sharp(jpg)
         .rotate(ROTATE[Orientation] ?? 0)
         .resize(THUMB_EDGE, THUMB_EDGE, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 85 })
-        .toFile(dest)
+        .toBuffer()
 }
 
 async function readMeta(files) {
@@ -93,8 +93,8 @@ async function readMeta(files) {
     return lines.join('\n')
 }
 
-function buildPrompt(thumbName, existing) {
-    return `Lies die Bilddatei ./${thumbName}. Es ist ein Foto für eine Bildagentur (redaktionelle Nutzung) und zeigt einen Bildschirm, ein Gerät oder ein Objekt mit dem Logo einer App, Marke oder Firma.
+// Feste Regeln als System-Prompt: ersetzt den langen Claude-Code-Prompt und ist für alle Bilder gleich (Cache).
+const SYSTEM_PROMPT = `Du verschlagwortest Fotos für eine Bildagentur (redaktionelle Nutzung). Jedes Foto zeigt einen Bildschirm, ein Gerät oder ein Objekt mit dem Logo einer App, Marke oder Firma.
 
 1. Erkenne alle Apps/Firmen/Marken auf dem Bild. Reihenfolge: von links nach rechts, dann von oben nach unten.
 2. Bildunterschrift: nur die Namen, wie sie gängig geschrieben werden. Mehrere durch Komma getrennt, die letzten beiden mit „und“.
@@ -113,21 +113,37 @@ Beispiele (Bildunterschrift → Keywords):
 - YouTube → YouTube, YouTube LLC, Alphabet, Alphabet Inc., Video-Streaming, Streaming, Soziale Medien, Social Media
 - Facebook, Instagram und Snapchat → Facebook, Instagram, Meta, Meta Platforms Inc., Snapchat, Snap, Snap Inc., Soziales Netzwerk, Social Network, Soziale Medien, Social Media
 
-${
-    existing
+Antworte nur mit dem strukturierten Ergebnis.`
+
+function buildPrompt(existing) {
+    return existing
         ? `Vorhandene Metadaten dieser Datei (kann ein Dateiname wie "apple-11-dark" oder veraltet sein – nutze sie als Hinweis, aber vertraue dem Bild):\n${existing}`
         : 'Es gibt keine vorhandenen Metadaten.'
 }
 
-Antworte nur mit dem strukturierten Ergebnis.`
-}
-
-async function askClaude(tmpDir, thumbName, existing) {
+// Bild geht inline per stream-json mit, ohne Read-Tool: spart einen Turn und den Tool-Overhead.
+async function askClaude(thumb, existing) {
+    const msg = {
+        type: 'user',
+        message: {
+            role: 'user',
+            content: [
+                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: thumb.toString('base64') } },
+                { type: 'text', text: buildPrompt(existing) },
+            ],
+        },
+    }
     const out = await run(
         'claude',
         [
             '-p',
-            buildPrompt(thumbName, existing),
+            '--input-format',
+            'stream-json',
+            '--output-format',
+            'stream-json',
+            '--verbose', // von der CLI für stream-json-Ausgabe verlangt
+            '--system-prompt',
+            SYSTEM_PROMPT,
             '--safe-mode', // keine Hooks/Plugins/CLAUDE.md des Nutzers – sauberer Output
             '--no-session-persistence',
             '--model',
@@ -135,17 +151,19 @@ async function askClaude(tmpDir, thumbName, existing) {
             '--effort',
             EFFORT,
             '--tools',
-            'Read',
-            '--allowedTools',
-            'Read',
-            '--output-format',
-            'json',
+            '',
             '--json-schema',
             JSON.stringify(SCHEMA),
         ],
-        { cwd: tmpDir }
+        JSON.stringify(msg) + '\n'
     )
-    const res = JSON.parse(out.toString())
+    const res = out
+        .toString()
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l))
+        .findLast((e) => e.type === 'result')
+    if (!res) throw new Error('claude: kein Ergebnis in der Ausgabe')
     if (res.is_error) throw new Error(`claude: ${res.result}`)
     return validate(res.structured_output)
 }
@@ -203,30 +221,22 @@ async function main() {
     const raws = all.filter((f) => /\.cr3$/i.test(f))
     if (!raws.length) throw new Error(`Keine CR3-Dateien in ${DIR}`)
 
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tagger-'))
     const failed = []
-    try {
-        for (const [i, rel] of raws.entries()) {
-            const tag = `[${i + 1}/${raws.length}] ${rel}`
-            try {
-                const sidecar = byLower.get(rel.replace(/\.cr3$/i, '.xmp').toLowerCase())
-                const files = [rel, sidecar].filter(Boolean).map((f) => path.join(DIR, f))
+    for (const [i, rel] of raws.entries()) {
+        const tag = `[${i + 1}/${raws.length}] ${rel}`
+        try {
+            const sidecar = byLower.get(rel.replace(/\.cr3$/i, '.xmp').toLowerCase())
+            const files = [rel, sidecar].filter(Boolean).map((f) => path.join(DIR, f))
 
-                const thumbName = `thumb-${i}.jpg`
-                await makeThumb(files[0], path.join(tmpDir, thumbName))
-                const meta = await askClaude(tmpDir, thumbName, await readMeta(files))
-                await writeMeta(files, meta)
-                await fs.rm(path.join(tmpDir, thumbName), { force: true })
+            const meta = await askClaude(await makeThumb(files[0]), await readMeta(files))
+            await writeMeta(files, meta)
 
-                console.log(`${tag}\n  ${meta.company}: ${meta.caption}\n  ${meta.keywords.join(', ')}`)
-            } catch (e) {
-                failed.push(rel)
-                console.error(`${tag}\n  FEHLER: ${e.message}`)
-                if (e.noData) playSound('Basso') // nicht awaiten, nächste Datei startet sofort
-            }
+            console.log(`${tag}\n  ${meta.company}: ${meta.caption}\n  ${meta.keywords.join(', ')}`)
+        } catch (e) {
+            failed.push(rel)
+            console.error(`${tag}\n  FEHLER: ${e.message}`)
+            if (e.noData) playSound('Basso') // nicht awaiten, nächste Datei startet sofort
         }
-    } finally {
-        await fs.rm(tmpDir, { recursive: true, force: true })
     }
 
     console.log(`\nFertig: ${raws.length - failed.length} ok, ${failed.length} Fehler.`)
