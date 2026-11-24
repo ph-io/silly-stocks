@@ -6,6 +6,7 @@
         "shoot": "node shooter.mjs",
         "shoot:dry": "node shooter.mjs --dry-run",
         "shoot:screenshots": "node shooter.mjs screenshots",
+        "shoot:web": "node web-shooter.mjs",
         "tag": "node tagger.mjs"
     },
     "dependencies": {
