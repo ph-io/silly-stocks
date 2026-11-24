@@ -205,6 +205,7 @@ async function writeMeta(files, { caption, keywords }) {
     await run('exiftool', [
         '-overwrite_original',
         '-m',
+        `-XMP-photoshop:Headline=${caption}`,
         `-XMP-dc:Title=${caption}`,
         `-XMP-dc:Description=${caption}`,
         // '-XMP-dc:Subject=', // alte Keywords ersetzen statt anhängen

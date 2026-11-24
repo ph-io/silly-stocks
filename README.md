@@ -23,7 +23,7 @@ iPhone-App zur Anzeige: `ios/SillyStocksApp.xcodeproj` (Safari geht zum Testen a
 | `yarn shoot` | Logos aus `logos/output/png` anzeigen und fotografieren |
 | `yarn shoot:screenshots` | Bilder aus `screenshots` anzeigen und fotografieren |
 | `yarn shoot:dry` | Nur Anzeige testen, ohne Kamera |
-| `yarn shoot:web [urls.txt]` | Websites in Safari öffnen, Logo in die Bildschirmmitte schieben, fotografieren |
+| `yarn shoot:web [urls.csv]` | Websites in Safari öffnen, Logo in die Bildschirmmitte schieben, fotografieren |
 | `yarn tag <ordner>` | CR3s per Claude verschlagworten (Caption + Keywords) |
 
 Ein anderer Bildordner geht als Argument: `yarn shoot logos/output/png/centered` oder  `yarn shoot "screenshots/mit Header"`.
@@ -54,7 +54,20 @@ Optionen für `yarn logos`: `--width 1206 --height 2622 --logo 1072`
 
 ## Websites fotografieren mit `yarn shoot:web`
 
-`yarn shoot:web urls.txt` liest eine URL pro Zeile. Leere Zeilen und Zeilen mit `#` werden ignoriert, ein Beispiel steht in `urls.example.txt`. Für jede URL:
+`yarn shoot:web urls.csv` liest eine Website pro Zeile, die Felder sind durch Semikolon getrennt:
+
+```
+Domain;Name;Keywords;Status
+github.com;GitHub;Software, Entwicklung, Code;
+otto.de;OTTO;Onlineshop, Versandhandel;2026-11-24
+```
+
+- **Domain** ohne `http(s)://`, ohne `www.` und ohne Pfad. Geöffnet wird `https://<domain>`.
+- **Name** ist Pflicht.
+- **Keywords** sind durch Komma getrennte Stichwörter.
+- **Status** ist das Datum der letzten Aufnahme. Das Script trägt es ein, sobald alle Modi einer Website durch sind. Zeilen mit Status überspringt es. Für eine neue Aufnahme leerst du das Feld. Nach einem Abbruch startest du das Script einfach neu.
+
+Kopfzeile, leere Zeilen und Zeilen mit `#` werden ignoriert. Felder in Anführungszeichen gehen nicht, Name und Keywords dürfen also kein Semikolon enthalten. Für jede Website:
 
 1. Das Script schaltet auf hell: Das System geht in den Light Mode, und die Bildschirme werden weiß. Alle Apps außer Safari werden ausgeblendet, Dock und Menüleiste blenden sich automatisch aus. Den weißen Hintergrund liefert ein randloses Fenster über Schreibtischbild, Icons und Widgets. Das Schreibtischbild selbst bleibt unverändert.
 2. Safari lädt die Seite in einem Fenster mit fester Größe (1440×900 pt).
@@ -64,7 +77,7 @@ Optionen für `yarn logos`: `--width 1206 --height 2622 --logo 1072`
 6. Das Script blendet das Terminal wieder aus, misst neu und löst die Kamera aus. Das ist das helle Foto.
 7. Das Script schaltet auf dunkel: Das System geht in den Dark Mode, die Bildschirme werden schwarz. Seiten mit eigenem Dark Mode stellen dabei um. Das Logo wird neu gesucht und neu platziert, dann löst die Kamera ein zweites Mal aus.
 
-Die URL landet im XMP als Titel, Beschreibung und `dc:source`. `yarn tag` ersetzt Titel und Beschreibung später, `dc:source` bleibt.
+Im XMP landen der Name als Titel, Domain und Name als Beschreibung (`github.com – GitHub`), die Keywords als Stichwörter (`dc:subject`) und die URL als `dc:source`. `yarn tag` ersetzt Titel, Beschreibung und Stichwörter später, nutzt die alten Werte aber als Hinweis. `dc:source` bleibt.
 
 Die Fotos landen nummeriert in `ingest/`, das Protokoll mit der Spalte `modus` (hell/dunkel) in `ingest/web-shots.csv`. Seiten ohne erkennbares Logo werden übersprungen und mit Grund protokolliert.
 
@@ -85,7 +98,6 @@ Einmalig einrichten:
 --dark             Nur das dunkle Foto (ohne beide: hell und dunkel)
 --window <WxH>     Fenstergröße in Punkten                      [1440x900]
 --settle <ms>      Wartezeit nach dem Laden                     [1500]
---start <n>        Mit URL Nr. n beginnen (zum Fortsetzen)      [1]
 --shots <n>        Aufnahmen pro URL und Modus (hell/dunkel)    [1]
 --out <dir>        Zielordner                                   [./ingest]
 --embed            XMP in die CR3 schreiben statt Sidecar
@@ -93,7 +105,7 @@ Einmalig einrichten:
 --no-pause         Nicht auf Enter warten, voll automatisch
 ```
 
-Beispiel: `yarn shoot:web urls.txt --display 2 --dry-run`
+Beispiel: `yarn shoot:web urls.csv --display 2 --dry-run`
 
 ## Verschlagworten mit `yarn tag`
 

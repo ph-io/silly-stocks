@@ -377,7 +377,9 @@ function buildXmp(text) {
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
-    xmlns:dc="http://purl.org/dc/elements/1.1/">
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+    photoshop:Headline="${t}">
    <dc:title>
     <rdf:Alt><rdf:li xml:lang="x-default">${t}</rdf:li></rdf:Alt>
    </dc:title>
@@ -393,7 +395,7 @@ function buildXmp(text) {
 
 async function writeMeta(file, text) {
     if (args.embed) {
-        await run('exiftool', ['-overwrite_original', '-m', `-XMP-dc:Title=${text}`, `-XMP-dc:Description=${text}`, file])
+        await run('exiftool', ['-overwrite_original', '-m', `-XMP-photoshop:Headline=${text}`, `-XMP-dc:Title=${text}`, `-XMP-dc:Description=${text}`, file])
         return file
     }
     const sidecar = file.replace(/\.[^.]+$/, '') + '.xmp'

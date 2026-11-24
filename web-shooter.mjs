@@ -4,10 +4,10 @@
 // Öffnet Websites nacheinander in Safari, sucht das Logo der Seite und schiebt
 // das Safari-Fenster so, dass der Mittelpunkt des Logos genau in der Mitte des
 // Bildschirms liegt. Dann löst die Kamera per gphoto2 aus, die RAW-Datei wird
-// fortlaufend nummeriert (z. B. 0001.CR3) geladen und die URL in eine XMP-Datei
-// geschrieben (Titel, Beschreibung und dc:source).
+// fortlaufend nummeriert (z. B. 0001.CR3) geladen und eine XMP-Datei geschrieben
+// (Titel = Name, Beschreibung = Domain und Name, Stichwörter = Keywords, dc:source = URL).
 //
-// Ablauf pro URL: hell schalten (System im Light Mode, weißer Hintergrund, alle
+// Ablauf pro Website: hell schalten (System im Light Mode, weißer Hintergrund, alle
 // Apps außer Safari ausgeblendet, Dock und Menüleiste automatisch ausblenden),
 // laden, Cookie-Banner wegklicken, Logo finden, Fenster platzieren. Dann auf
 // Enter warten (Banner ggf. von Hand wegklicken), neu messen und auslösen.
@@ -22,14 +22,18 @@
 // Safari-Zoom 100 %, Seitenleiste und Statusleiste aus, kein Vollbild.
 //
 // Aufruf:
-//   node web-shooter.mjs [url-datei]          (Standard: urls.txt)
+//   node web-shooter.mjs [csv-datei]          (Standard: urls.csv)
 //
-// Die URL-Datei enthält eine URL pro Zeile. Leere Zeilen und Zeilen mit # werden
-// ignoriert, fehlt das Schema, wird https:// ergänzt.
+// Die CSV-Datei hat pro Zeile: Domain;Name;Keywords;Status
+//   Domain   ohne http/s, ohne www., ohne Pfad (geöffnet wird https://<domain>)
+//   Keywords Komma-getrennte Stichwörter
+//   Status   Datum der letzten Aufnahme. Das Script trägt es ein, sobald alle
+//            Modi einer Website durch sind. Zeilen mit Status werden übersprungen.
+// Kopfzeile, leere Zeilen und Zeilen mit # werden ignoriert. Zum Fortsetzen
+// nach einem Abbruch einfach neu starten.
 //
 // Optionen:
 //   --out <dir>       Zielordner für die Kameradateien                   [./ingest]
-//   --start <n>       Mit URL Nr. n beginnen (1-basiert, zum Fortsetzen)   [1]
 //   --shots <n>       Aufnahmen pro URL und Modus (hell/dunkel)            [1]
 //   --settle <ms>     Wartezeit nach dem Laden der Seite                   [1500]
 //   --window <WxH>    Größe des Safari-Fensters in Punkten                 [1200x900]
@@ -54,7 +58,6 @@ const { values: args, positionals } = parseArgs({
     allowPositionals: true,
     options: {
         out: { type: 'string', default: './ingest' },
-        start: { type: 'string', default: '1' },
         shots: { type: 'string', default: '1' },
         settle: { type: 'string', default: '1500' },
         window: { type: 'string', default: '1200x900' },
@@ -67,7 +70,7 @@ const { values: args, positionals } = parseArgs({
     },
 })
 
-const URL_FILE = path.resolve(positionals[0] ?? 'urls.txt')
+const CSV_FILE = path.resolve(positionals[0] ?? 'urls.csv')
 const OUT_DIR = path.resolve(args.out)
 const SHOTS = Math.max(1, Number(args.shots))
 const SETTLE_MS = Math.max(0, Number(args.settle))
@@ -106,22 +109,79 @@ function playSound(name) {
     return run('afplay', [`/System/Library/Sounds/${name}.aiff`]).catch(() => {})
 }
 
-function parseUrls(text) {
-    return text
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => l && !l.startsWith('#'))
-        .map((l) => {
-            try {
-                return new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(l) ? l : `https://${l}`).href
-            } catch {
-                throw new Error(`Keine gültige URL in ${URL_FILE}: ${l}`)
-            }
-        })
+// Pro Zeile Domain;Name;Keywords;Status. line = Zeilenindex für withStatus.
+// shortcut: einfaches split(';') ohne Felder in Anführungszeichen, Semikolons in Name oder Keywords gehen nicht.
+function parseSites(text) {
+    const sites = []
+    text.split(/\r?\n/).forEach((raw, line) => {
+        const f = raw
+            .replace(/^﻿/, '') // BOM, schreiben Excel und Numbers
+            .split(';')
+            .map((s) => s.trim())
+        if (!f[0] || f[0].startsWith('#') || f[0].toLowerCase() === 'domain') return
+        const where = `Zeile ${line + 1} in ${CSV_FILE}`
+        if (f.length > 4 || !f[1] || raw.includes('"')) throw new Error(`${where}: erwartet Domain;Name;Keywords;Status ohne Anführungszeichen, nicht "${raw}"`)
+        // Falls doch Schema, www. oder Pfad drinstehen: abschneiden.
+        const domain = f[0]
+            .replace(/^https?:\/\//i, '')
+            .replace(/^www\./i, '')
+            .split(/[/?#]/)[0]
+            .toLowerCase()
+        let url
+        try {
+            url = new URL(`https://${domain}`).href
+        } catch {
+            throw new Error(`${where}: keine gültige Domain: ${f[0]}`)
+        }
+        const keywords = (f[2] ?? '')
+            .split(',')
+            .map((k) => k.trim())
+            .filter(Boolean)
+        sites.push({ line, domain, url, name: f[1], keywords, status: f[3] ?? '' })
+    })
+    return sites
 }
 
-assert.deepEqual(parseUrls('# Kommentar\n\n  apple.com \nhttp://x.de/a?b=1\n'), ['https://apple.com/', 'http://x.de/a?b=1'])
-assert.throws(() => parseUrls('https://'))
+// Setzt date als Status (4. Feld) in allen Zeilen mit dieser Domain, alle anderen Zeilen bleiben gleich.
+function withStatus(text, domain, date) {
+    const lines = text.split(/\r?\n/)
+    for (const s of parseSites(text)) {
+        if (s.domain !== domain) continue
+        const f = lines[s.line].split(';')
+        f[3] = date
+        lines[s.line] = f.join(';')
+    }
+    return lines.join(text.includes('\r\n') ? '\r\n' : '\n')
+}
+
+assert.deepEqual(parseSites('﻿Domain;Name;Keywords;Status\r\n# Kommentar\r\n\r\nhttps://www.otto.de/shop;OTTO; Shop, Versand ,;\r\ncisco.com;Cisco;;2026-11-24\r\n'), [
+    { line: 3, domain: 'otto.de', url: 'https://otto.de/', name: 'OTTO', keywords: ['Shop', 'Versand'], status: '' },
+    { line: 4, domain: 'cisco.com', url: 'https://cisco.com/', name: 'Cisco', keywords: [], status: '2026-11-24' },
+])
+assert.throws(() => parseSites('github.com')) // Name fehlt
+assert.throws(() => parseSites('https://;Leer'))
+assert.equal(withStatus('Domain;Name\nwww.otto.de;OTTO\nzdf.de;ZDF;;\n', 'otto.de', '2026-11-24'), 'Domain;Name\nwww.otto.de;OTTO;;2026-11-24\nzdf.de;ZDF;;\n')
+assert.equal(withStatus('﻿a.de;A;x;alt\r\n', 'a.de', 'neu'), '﻿a.de;A;x;neu\r\n')
+
+// Gruppen von Zeilen mit derselben Domain. Zeilen mit Status zählen mit, weil saveStatus alle Zeilen einer Domain setzt.
+function duplicates(rows) {
+    const byDomain = new Map()
+    for (const r of rows) byDomain.set(r.domain, [...(byDomain.get(r.domain) ?? []), r])
+    return [...byDomain.values()].filter((g) => g.length > 1)
+}
+
+assert.deepEqual(
+    duplicates(parseSites('a.de;A\nb.de;B\nhttps://www.a.de/x;A2;;2026-11-24\n')).map((g) => g.map((r) => r.line)),
+    [[0, 2]]
+)
+
+async function saveStatus(domain) {
+    const date = new Date().toLocaleDateString('sv-SE') // lokales Datum als JJJJ-MM-TT
+    // Neu einlesen, damit Änderungen an der Datei während des Laufs erhalten bleiben.
+    const text = withStatus(await fs.readFile(CSV_FILE, 'utf8'), domain, date)
+    await fs.writeFile(`${CSV_FILE}.tmp`, text, 'utf8')
+    await fs.rename(`${CSV_FILE}.tmp`, CSV_FILE)
+}
 
 // ---------------------------------------------------------------- Safari per JXA
 
@@ -670,22 +730,29 @@ function xmlEscape(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-// Titel und Beschreibung = URL (tagger.mjs nutzt sie als Hinweis und ersetzt sie später),
+const description = (site) => `${site.domain} – ${site.name}`
+
+// Titel = Name, Beschreibung = Domain und Name, dc:subject = Keywords (tagger.mjs nutzt alles als Hinweis),
 // dc:source = URL (bleibt erhalten, tagger.mjs fasst sie nicht an).
-function buildXmp(text) {
-    const t = xmlEscape(text)
+function buildXmp(site) {
+    const subject = site.keywords.length
+        ? `
+   <dc:subject>
+    <rdf:Bag>${site.keywords.map((k) => `<rdf:li>${xmlEscape(k)}</rdf:li>`).join('')}</rdf:Bag>
+   </dc:subject>`
+        : ''
     return `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
   <rdf:Description rdf:about=""
     xmlns:dc="http://purl.org/dc/elements/1.1/">
    <dc:title>
-    <rdf:Alt><rdf:li xml:lang="x-default">${t}</rdf:li></rdf:Alt>
+    <rdf:Alt><rdf:li xml:lang="x-default">${xmlEscape(site.name)}</rdf:li></rdf:Alt>
    </dc:title>
    <dc:description>
-    <rdf:Alt><rdf:li xml:lang="x-default">${t}</rdf:li></rdf:Alt>
-   </dc:description>
-   <dc:source>${t}</dc:source>
+    <rdf:Alt><rdf:li xml:lang="x-default">${xmlEscape(description(site))}</rdf:li></rdf:Alt>
+   </dc:description>${subject}
+   <dc:source>${xmlEscape(site.url)}</dc:source>
   </rdf:Description>
  </rdf:RDF>
 </x:xmpmeta>
@@ -693,25 +760,25 @@ function buildXmp(text) {
 `
 }
 
-async function writeMeta(file, text) {
+async function writeMeta(file, site) {
     if (args.embed) {
-        await run('exiftool', ['-overwrite_original', '-m', `-XMP-dc:Title=${text}`, `-XMP-dc:Description=${text}`, `-XMP-dc:Source=${text}`, file])
+        const tags = [`-XMP-dc:Title=${site.name}`, `-XMP-dc:Description=${description(site)}`, `-XMP-dc:Source=${site.url}`, ...site.keywords.map((k) => `-XMP-dc:Subject=${k}`)]
+        await run('exiftool', ['-overwrite_original', '-m', ...tags, file])
         return file
     }
     const sidecar = file.replace(/\.[^.]+$/, '') + '.xmp'
-    await fs.writeFile(sidecar, buildXmp(text), 'utf8')
+    await fs.writeFile(sidecar, buildXmp(site), 'utf8')
     return sidecar
 }
 
 // ---------------------------------------------------------------- Ablauf
 
-let currentIndex = null
 let aborting = false
 
 async function abort() {
     if (aborting) return
     aborting = true
-    if (currentIndex !== null) console.log(`\nAbgebrochen. Fortsetzen mit: --start ${currentIndex + 1}`)
+    console.log('\nAbgebrochen. Zum Fortsetzen neu starten, Einträge mit Status werden übersprungen.')
     await cleanup()
     process.exit(130)
 }
@@ -728,9 +795,20 @@ async function ask(question) {
 }
 
 async function main() {
-    const urls = parseUrls(await fs.readFile(URL_FILE, 'utf8'))
-    if (!urls.length) throw new Error(`Keine URLs in ${URL_FILE}`)
-    const startIdx = Math.min(Math.max(1, Number(args.start)), urls.length) - 1
+    const rows = parseSites(await fs.readFile(CSV_FILE, 'utf8'))
+    const sites = rows.filter((s) => !s.status)
+    console.log(`${CSV_FILE}: ${sites.length} offen, ${rows.length - sites.length} mit Status übersprungen`)
+    const dups = duplicates(rows)
+    if (dups.length) {
+        console.log(`\nDoppelte Domains (${dups.length}):`)
+        for (const g of dups) {
+            console.log(`  ${g[0].domain}`)
+            for (const r of g) console.log(`    Zeile ${r.line + 1}: ${r.name}${r.status ? ` [${r.status}]` : ''}`)
+        }
+        console.log()
+    }
+    if (!sites.length) return console.log('Keine offenen Einträge.')
+    if (dups.length && (await ask('Enter = trotzdem starten, q = abbrechen: ')) === 'q') return
     await fs.mkdir(OUT_DIR, { recursive: true })
 
     if (!DRY) {
@@ -763,7 +841,7 @@ async function main() {
 
     const log = path.join(OUT_DIR, 'web-shots.csv')
     if (!fssync.existsSync(log)) await fs.writeFile(log, 'zeit;nr;url;modus;datei;status\n')
-    const logLine = (i, mode, file, status) => fs.appendFile(log, `${new Date().toISOString()};${i + 1};${urls[i]};${mode};${file};${status}\n`)
+    const logLine = (i, mode, file, status) => fs.appendFile(log, `${new Date().toISOString()};${i + 1};${sites[i].url};${mode};${file};${status}\n`)
 
     async function shoot(i, mode) {
         for (let s = 1; s <= SHOTS; s++) {
@@ -774,24 +852,22 @@ async function main() {
             }
             const files = await captureWithRetry()
             for (const f of files) {
-                const meta = await writeMeta(f, urls[i])
+                const meta = await writeMeta(f, sites[i])
                 await logLine(i, mode, path.basename(f), 'ok')
-                console.log(`  ${mode}: ${path.basename(f)}  ->  ${path.basename(meta)}  "${urls[i]}"`)
+                console.log(`  ${mode}: ${path.basename(f)}  ->  ${path.basename(meta)}  "${sites[i].name}"`)
             }
         }
     }
 
-    console.log(`\n${urls.length} URLs aus ${URL_FILE}, Start bei Nr. ${startIdx + 1}`)
     playSound('Glass') // nicht awaiten, Durchlauf startet sofort
-    for (let i = startIdx; i < urls.length; i++) {
-        currentIndex = i
-        const url = urls[i]
-        console.log(`\n[${i + 1}/${urls.length}] ${url}`)
+    for (let i = 0; i < sites.length; i++) {
+        const site = sites[i]
+        console.log(`\n[${i + 1}/${sites.length}] ${site.domain} – ${site.name}`)
 
         const [first, ...rest] = MODES
         try {
             await setLook(first)
-            await load(url)
+            await load(site.url)
             await hideOthers()
             await placeLogo(target)
             if (PAUSE) {
@@ -828,9 +904,10 @@ async function main() {
             }
             await shoot(i, mode)
         }
+        // Erst nach allen Modi, damit ein Abbruch mittendrin den Eintrag offen lässt.
+        if (!DRY) await saveStatus(site.domain).catch((e) => console.log(`  Achtung: Status nicht gespeichert: ${e.message}`))
     }
 
-    currentIndex = null
     await cleanup()
     console.log('\nFertig.')
     await playSound('Hero')
@@ -840,7 +917,6 @@ async function main() {
 main().catch(async (e) => {
     if (aborting) return // Ctrl-C: abort() räumt auf und beendet
     console.error(`\nFehler: ${e.message}`)
-    if (currentIndex !== null) console.error(`Fortsetzen mit: --start ${currentIndex + 1}`)
     await cleanup()
     process.exit(1)
 })

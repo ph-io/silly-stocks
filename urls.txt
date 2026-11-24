@@ -1,8 +1,0 @@
-# Eine URL pro Zeile. Leere Zeilen und Zeilen mit # werden ignoriert.
-https://github.com
-https://www.tagesschau.de
-stripe.com
-otto.de
-cisco.com
-pornhub.com
-zdf.de
