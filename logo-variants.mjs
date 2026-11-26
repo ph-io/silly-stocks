@@ -13,6 +13,8 @@
  *      Breite, also 1072 px; entspricht dem bisherigen 2000 auf 2250), in zwei Layouts:
  *        centered: Logo in der Mitte
  *        top:      Logo oben (Abstand = seitlicher Rand bei voller Breite), Fläche nach unten erweitert
+ *        rotated:  Logo um 90° im Uhrzeigersinn gedreht, zentriert, füllt 75 % des Formats
+ *                  (Breite oder Höhe, je nachdem was zuerst erreicht wird; --logo gilt hier nicht)
  *      Hintergrund weiß (<name>.svg) bzw. schwarz (<name>-dark.svg).
  *   3. Alle erzeugten SVGs als PNG rendern.
  *
@@ -20,8 +22,8 @@
  *   node logo-variants.mjs [eingabeordner] [ausgabeordner] [--width 1206] [--height 2622] [--logo 1072]
  *
  * Ausgabe (Standard logos/output, d. h. <eingabeordner>/../output):
- *   <ausgabeordner>/svg/<centered|top>/<unterordner>/<name>.svg|<name>-dark.svg
- *   <ausgabeordner>/png/<centered|top>/<unterordner>/<name>.png|<name>-dark.png
+ *   <ausgabeordner>/svg/<centered|top|rotated>/<unterordner>/<name>.svg|<name>-dark.svg
+ *   <ausgabeordner>/png/<centered|top|rotated>/<unterordner>/<name>.png|<name>-dark.png
  */
 
 import fs from 'node:fs/promises'
@@ -64,7 +66,9 @@ if (!(CANVAS_W > 0 && CANVAS_H > 0)) throw new Error(`--width und --height müss
 if (!(LOGO_PX > 0)) throw new Error(`--logo muss > 0 sein (ist: ${opts.logo})`)
 if (!(CANVAS_W >= LOGO_PX)) throw new Error(`Breite (${CANVAS_W}) muss >= --logo (${LOGO_PX}) sein`)
 
-const LAYOUTS = ['centered', 'top']
+const LAYOUTS = ['centered', 'top', 'rotated']
+// Anteil von Breite und Höhe, den das gedrehte Logo bei "rotated" höchstens füllt
+const ROTATED_FILL = 0.75
 // Abstand oben bei "top" = seitlicher Rand eines Logos in voller Breite
 const TOP_MARGIN_PX = (CANVAS_W - LOGO_PX) / 2
 
@@ -146,11 +150,20 @@ function expandWithBackground(svg, color, layout) {
 
     // Bildschirmfläche: längste Logoseite entspricht LOGO_PX, Logo horizontal zentriert,
     // vertikal zentriert ("centered") oder TOP_MARGIN_PX unter der Oberkante ("top")
-    const unitsPerPx = Math.max(w, h) / LOGO_PX
+    // "rotated": um 90° im Uhrzeigersinn gedreht (Breite/Höhe getauscht), zentriert,
+    // eingepasst auf ROTATED_FILL der Bildschirmbreite und -höhe
+    const unitsPerPx = layout === 'rotated' ? Math.max(h / (CANVAS_W * ROTATED_FILL), w / (CANVAS_H * ROTATED_FILL)) : Math.max(w, h) / LOGO_PX
     const nw = CANVAS_W * unitsPerPx,
         nh = CANVAS_H * unitsPerPx
     const nx = x + w / 2 - nw / 2,
         ny = layout === 'top' ? y - TOP_MARGIN_PX * unitsPerPx : y + h / 2 - nh / 2
+
+    let body = svg.slice(root.end)
+    if (layout === 'rotated') {
+        const close = body.toLowerCase().lastIndexOf('</svg>')
+        if (close < 0) throw new Error('kein schließendes </svg> gefunden')
+        body = `<g transform="rotate(90 ${fmt(x + w / 2)} ${fmt(y + h / 2)})">` + body.slice(0, close) + '</g>' + body.slice(close)
+    }
 
     tag = setAttr(tag, 'viewBox', `${fmt(nx)} ${fmt(ny)} ${fmt(nw)} ${fmt(nh)}`)
     tag = setAttr(tag, 'width', fmt(CANVAS_W))
@@ -159,7 +172,7 @@ function expandWithBackground(svg, color, layout) {
     // Inline-Style schlägt Stylesheet-Regeln wie "rect { fill: … }"
     const bg = `<rect data-logo-bg="1" x="${fmt(nx)}" y="${fmt(ny)}" width="${fmt(nw)}" height="${fmt(nh)}" ` + `style="fill:${color};stroke:none"/>`
 
-    return svg.slice(0, root.start) + tag + bg + svg.slice(root.end)
+    return svg.slice(0, root.start) + tag + bg + body
 }
 
 // ---------------------------------------------------------------- Schritt 1
