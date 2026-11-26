@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // tagger.mjs
 //
-// Geht über alle CR3-Dateien eines Ordners (samt Unterordnern), erzeugt aus der
-// eingebetteten Vorschau ein Thumbnail (sharp), lässt Claude (claude CLI) die
+// Geht über alle CR3-, JPG- und PNG-Dateien eines Ordners (samt Unterordnern), erzeugt
+// ein Thumbnail (sharp; bei CR3 aus der eingebetteten Vorschau), lässt Claude (claude CLI) die
 // abgebildete App/Firma erkennen und schreibt die neue Caption und Keywords per
-// exiftool in die CR3 und – falls vorhanden – in die XMP-Sidecar-Datei.
+// exiftool in die Bilddatei und – falls vorhanden – in die XMP-Sidecar-Datei.
 //
-// Vorhandene Titel/Beschreibung/Keywords aus CR3 und XMP gehen als Hinweis in den Prompt.
+// Vorhandene Titel/Beschreibung/Keywords aus Bild und XMP gehen als Hinweis in den Prompt.
 //
 // Voraussetzungen: Node.js 20+, exiftool (brew install exiftool), claude CLI (eingeloggt).
 //
@@ -70,13 +70,17 @@ function playSound(name) {
 // EXIF-Orientation (numerisch) -> Drehwinkel für sharp. Die eingebettete Vorschau ist ungedreht.
 const ROTATE = { 3: 180, 6: 90, 8: 270 }
 
-async function makeThumb(cr3) {
-    let jpg = await run('exiftool', ['-b', '-PreviewImage', cr3])
-    if (!jpg.length) jpg = await run('exiftool', ['-b', '-JpgFromRaw', cr3])
-    if (!jpg.length) throw new Error('keine eingebettete Vorschau gefunden')
-    const [{ Orientation } = {}] = JSON.parse((await run('exiftool', ['-j', '-n', '-Orientation', cr3])).toString())
-    return sharp(jpg)
-        .rotate(ROTATE[Orientation] ?? 0)
+async function makeThumb(file) {
+    let img
+    if (/\.cr3$/i.test(file)) {
+        let jpg = await run('exiftool', ['-b', '-PreviewImage', file])
+        if (!jpg.length) jpg = await run('exiftool', ['-b', '-JpgFromRaw', file])
+        if (!jpg.length) throw new Error('keine eingebettete Vorschau gefunden')
+        const [{ Orientation } = {}] = JSON.parse((await run('exiftool', ['-j', '-n', '-Orientation', file])).toString())
+        img = sharp(jpg).rotate(ROTATE[Orientation] ?? 0)
+    } else img = sharp(file).rotate() // JPG/PNG: rotate() ohne Winkel dreht nach EXIF-Orientation
+    return img
+        .flatten({ background: '#ffffff' }) // PNG-Transparenz sonst schwarz im JPEG
         .resize(THUMB_EDGE, THUMB_EDGE, { fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 85 })
         .toBuffer()
@@ -219,14 +223,14 @@ async function writeMeta(files, { caption, keywords }) {
 async function main() {
     const all = (await fs.readdir(DIR, { recursive: true })).sort()
     const byLower = new Map(all.map((f) => [f.toLowerCase(), f]))
-    const raws = all.filter((f) => /\.cr3$/i.test(f))
-    if (!raws.length) throw new Error(`Keine CR3-Dateien in ${DIR}`)
+    const raws = all.filter((f) => /\.(cr3|jpe?g|png)$/i.test(f))
+    if (!raws.length) throw new Error(`Keine CR3/JPG/PNG-Dateien in ${DIR}`)
 
     const failed = []
     for (const [i, rel] of raws.entries()) {
         const tag = `[${i + 1}/${raws.length}] ${rel}`
         try {
-            const sidecar = byLower.get(rel.replace(/\.cr3$/i, '.xmp').toLowerCase())
+            const sidecar = byLower.get(rel.replace(/\.[^.]+$/, '.xmp').toLowerCase())
             const files = [rel, sidecar].filter(Boolean).map((f) => path.join(DIR, f))
 
             const meta = await askClaude(await makeThumb(files[0]), await readMeta(files))
